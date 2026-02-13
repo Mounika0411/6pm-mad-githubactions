@@ -1,4 +1,4 @@
-name: Java CI/CD Pipeline to Tomcat
+name: Java CI/CD Pipeline to Tomcat + S3
 
 on:
   push:
@@ -31,7 +31,8 @@ jobs:
             echo "Maven is already installed"
           fi
           mvn -version
-       # 4. Cache Maven dependencies
+
+      # 4. Cache Maven dependencies
       - name: Cache Maven packages
         uses: actions/cache@v4
         with:
@@ -52,7 +53,19 @@ jobs:
           name: myapp
           path: target/*.war
 
-      # 7. Install SonarQube Scanner CLI
+      # 7. Upload WAR to S3
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Upload WAR to S3
+        run: |
+          echo "Uploading WAR to S3 bucket my-app-deploy-bucket-6pm..."
+          aws s3 cp target/*.war s3://my-app-deploy-bucket-6pm/ --acl private
+
+      # 8. Install SonarQube Scanner CLI
       - name: Install SonarQube Scanner CLI
         run: |
           if [ ! -d "$HOME/sonar-scanner-cli" ]; then
@@ -64,7 +77,7 @@ jobs:
           export PATH=$HOME/sonar-scanner-cli/bin:$PATH
           sonar-scanner -v
           
-      # 8. SonarQube analysis
+      # 9. SonarQube analysis
       - name: SonarQube Analysis
         env:
           SONAR_HOST: ${{ secrets.SONAR_HOST }}
@@ -83,17 +96,16 @@ jobs:
     environment: production
 
     steps:
-      # 9. Download WAR artifact
+      # 10. Download WAR artifact
       - name: Download WAR artifact
         uses: actions/download-artifact@v4
         with:
           name: myapp
 
-      # 10. Deploy WAR via Tomcat Manager
+      # 11. Deploy WAR via Tomcat Manager
       - name: Deploy to Tomcat
         run: |
           WAR_FILE=$(ls *.war)
           echo "Deploying $WAR_FILE to Tomcat..."
           curl -v --upload-file "$WAR_FILE" \
             "http://${{ secrets.TOMCAT_USER }}:${{ secrets.TOMCAT_PASSWORD }}@${{ secrets.TOMCAT_HOST }}/manager/text/deploy?path=/myapp&update=true"
-
